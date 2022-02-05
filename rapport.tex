@@ -1,0 +1,199 @@
+\documentclass[12pt, pdflatex]{article}
+\usepackage[a4paper, top=2cm, bottom=3cm, right=3cm, left=3cm]{geometry}
+\usepackage[french]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[a4paper]{geometry}
+\usepackage{amsmath}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx} 
+\usepackage{tabularx}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{parskip}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage[small]{titlesec}
+
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true}
+\setlength\parindent{24pt}
+\titlelabel{\thetitle.\quad}
+\newcommand{\q}[1]{ \par\smallbreak{\noindent \bf Question #1.}\ }
+
+\title{Rapport projet conception logicielle avancée}
+\author{VU Nguyen Phuong Vy}
+
+\date{\today}
+
+\begin{document}
+
+{\bf
+\noindent Université de Caen Normandie \hfill Année 2020 -- 2021\\
+\noindent UFR de Sciences \\
+\begin{center}
+Autre Paradigme\\
+Parties 2, 3 et 4 du DM\\
+~\linebreak
+Nom et prénom: Nguyen Phuong Vy VU\\
+L2 Informatique Groupe 2A\\
+Nombre d'étudiant: 21911658
+\end{center}}
+
+
+\setcounter{section}{1}
+\section{Prétraitement : Suppression des tautologies}
+\q{1} Pourquoi peut-on supprimer d’une formule toutes les clauses qui sont des tautologies ?
+
+On peut supprimer une formule tautologie $\top$ parce que la tautologie est l'élément neutre de conjonction, on a bien $\top \wedge  A \equiv A \wedge \top = A$
+
+\q{2} Donner une condition suffisante pour qu’une clause soit une tautologie. Cette condition est-elle nécessaire ?
+
+La formule A est une tautologie si et seulement si $A \equiv T$. Cette condition est nécessaire, elle peut simplifier une formule.
+
+\q{3} Définir la fonction \texttt{(negation lit)} qui à un littéral associe sa négation.
+\begin{lstlisting}
+    negation :: Litteral -> Litteral
+    negation (Pos a) = Neg a
+    negation (Neg a) = Pos a 
+\end{lstlisting}
+
+\q{4} Définir la fonction \texttt{(estTauto ls)}.
+\begin{lstlisting}
+    estTauto :: Clause -> Bool
+    estTauto ls = and [or [valeur lit dist | lit <- ls ] | dist <- genereTable (rmdups (listeVarsClause ls))]
+\end{lstlisting}
+
+\section{Existence d’une distribution : mise en œuvre de DPLL (v1)}
+    \subsection{Conditions d’arrêt}
+
+    \q{1} Justifier la seconde condition d’arrêt.
+
+    On sait qu'une formule est évidemment contradictoire si et seulement si elle contient deux clauses unitaires de la forme \texttt{litt} et négation de \texttt{litt}.
+
+    Alors, on a toujours $a \wedge \lnot a = \bot$ et
+    $\bot$ est l'élément absorbant d'une conjonction, on possède $\bot \wedge A \equiv \bot$. On peut conclure si $f$ est évidemment contradictoire alors $f$ est insatisfaisable.
+\pagebreak
+    \q{2} Définir la fonction \texttt{(estUnitaire c)} qui détermine si une clause \texttt{c} est unitaire.
+    \begin{lstlisting}
+    estUnitaire :: Clause -> Bool
+    estUnitaire c 
+        | length c == 1 = True
+        | otherwise = False
+    \end{lstlisting}
+
+    \q{3} Compléter la définition de la fonction\texttt{(estEvidtContradic cs)}.
+    \begin{lstlisting}
+    estEvidtContradic :: Formule -> Bool 
+    estEvidtContradic [] = False
+    estEvidtContradic cs = chercher (clause cs)
+        where chercher [] = False
+              chercher (c:cs)
+                  | negation c `elem` cs = True 
+                  | otherwise = chercher cs
+              clause [] = []
+              clause (c:cs) 
+                  | estUnitaire c = c ++ clause cs 
+                  | otherwise = clause cs 
+    \end{lstlisting}
+
+    \subsection{Simplification : règle du littéral seul (ou règle de la clause unitaire)}
+    \q{1} Montrer que cette règle de simplification est correcte.
+
+    Pour montrer cette règle, on va trouver est-ce qu'une formule sera satisfiable (avoir au moins l'une de ses valeurs est $vraie$) après avoir appliqué cette règle. Soit la formule $f = (a \vee b) \wedge (\lnot a) \wedge (a \vee \lnot b \vee c)$ et on sait que $f$ est satisfiable.
+
+    Appliquer la règle de la clause unitaire, on a:
+    \begin{align*}
+        &\text{Clause unitaire : a, donc } f = b \wedge (\lnot b \vee c) \hspace{10pt}&\text{est satisfiable}\\
+        &\text{Clause unitaire : b, donc } f = c \hspace{10pt}&\text{est satisfiable}\\
+        &\text{Clause unitaire : c, donc } f = \emptyset  \hspace{10pt}&\text{est satisfiable}
+    \end{align*} 
+
+    On obtient la formule satisfiable à la fin lorsque la formule de départ est satisfiable aussi. Donc, cette règle de simplification est correcte.
+    
+    \q{2} Définir les fonctions \texttt{(existeSeul cs)} et \texttt{(trouveSeul cs)}.
+    \begin{lstlisting}
+    existeSeul :: Formule -> Bool
+    existeSeul [] = False 
+    existeSeul (c:cs)
+        | estUnitaire c = True 
+        | otherwise = existeSeul cs 
+    
+    trouveSeul :: Formule -> Litteral
+    trouveSeul [] = error "Pas trouve"
+    trouveSeul (c:cs)
+        | estUnitaire c = head c
+        | otherwise = trouveSeul cs
+    \end{lstlisting}
+\pagebreak
+    \q{3} Définir la fonction \texttt{(elimineSeul cs lit)} qui applique cette règle de simplification.
+    \begin{lstlisting}
+    elimineSeul [] _ = []
+    elimineSeul (c:cs) lit
+        | lit `elem` c = elimineSeul cs lit
+        | negation lit `elem` c = elimineLit c (negation lit) : elimineSeul cs lit
+        | otherwise = c : elimineSeul cs lit
+            where elimineLit [] _ = []
+                  elimineLit (c:cs) lit 
+                    | c == lit = elimineLit cs lit 
+                    | otherwise = c : elimineLit cs lit 
+    \end{lstlisting}
+
+
+    \subsection{Simplification : règle du littéral pur}
+    \q{1} Montrer que cette règle de simplification est correcte.
+    
+    On va chercher la satisfiabilité d'une formule qui contient une clause pure (avoir un littéral pur). Soit $f = (b \vee \lnot a) \wedge (c \vee \lnot b) \wedge (\lnot a \vee b \vee \lnot c) \wedge (b \vee c)$ dont $\lnot a$ est un littéral pur et $f$ est satisfiable.
+    \begin{align*}
+        &\text{Littéral pur : $\lnot a$, donc } f = (c \vee \lnot b) \wedge (b \vee c) \hspace{10pt}&\text{est satisfiable}\\
+        &\text{Littéral pur : c, donc } f = \emptyset  \hspace{10pt}&\text{est satisfiable}
+    \end{align*} 
+
+    On peut éliminer les clauses pures de $f$ sans changer sa satisfiabilité. Donc, cette règle de simplification est correcte. 
+
+
+    \q{2} En vous inspirant du travail mené pour mettre en œuvre la règle du littéral seul (cf Section), définir les fonctions \texttt{(existePur cs)} et \texttt{(trouvePur cs)} ainsi que la fonction \texttt{(eliminePur cs lit)}.
+    \begin{lstlisting}
+    existePur :: Formule -> Bool 
+    existePur cs = existe (rmdups (concat cs))
+        where existe [] = False
+              existe (c:cs) 
+                | negation c `notElem` cs = True 
+                | otherwise = existe (filter (/= negation c) cs)
+    
+    trouvePur :: Formule -> Litteral
+    trouvePur [] = error "Pas trouve"
+    trouvePur cs = head (supprimer (rmdups (concat cs)))
+        where supprimer [] = []
+              supprimer (c:cs)
+                | negation c `notElem` cs = c : supprimer cs
+                | otherwise = supprimer (filter (/= negation c) cs)
+    
+    eliminePur :: Formule -> Litteral -> Formule 
+    eliminePur [] _ = []
+    eliminePur (c:cs) lit
+        | lit `elem` c = eliminePur cs lit
+        | otherwise = c : eliminePur cs lit
+    \end{lstlisting}
+
+
+    \subsection{Recherche exhaustive (splitting)}
+    \q{1} Justifier l’architecture de la fonction \texttt{(estSatis f)}, i.e. en quoi applique-t-elle correctement \texttt{DPLL}?
+    
+    La fonction \texttt{estSatis f} applique \texttt{DPLL} en éliminant les clauses unitaires et les littérals purs avec les règles de simplification. S'il n'y les a pas, elle choisit une clause unitaire qui est le premier littéral ou la négation du premier littéral de la formule et répéter les étapes d'éliminer avec la règle de la clause unitaire jusqu'à la formule $f$ est vide donc elle est satisfiable. Mais si la formule à la fin est évidemment contradictoire, alors elle n'est pas satisfiable.
+
+    \q{2} Compléter la définition de la fonction \texttt{(estSatis f)}.
+    \begin{lstlisting}
+    estSatis :: Formule -> Bool 
+    estSatis [] = True 
+    estSatis f 
+        | estEvidtContradic f = False
+        | existeSeul f = estSatis (elimineSeul f (trouveSeul f))
+        | existePur f = estSatis (eliminePur f (trouvePur f))
+        | otherwise = estSatis (elimineSeul f (head (concat f))) || estSatis (elimineSeul f (negation (head (concat f)))) 
+    \end{lstlisting}
+
+    \q{3} Pourquoi n’applique-t-on l’élimination des tautologies qu’une fois et une seule sous forme de prétraitement ?
+
+    Dans l'application de la règle de la clause unitaire, si la formule à la fin est tautologie, alors la formule de départ ne peut pas être une tautologie. Cela affecte le résultat donc on doit éliminer les tautologies avant de traiter une formule.
+\end{document}
